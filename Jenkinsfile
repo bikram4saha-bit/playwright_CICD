@@ -8,7 +8,7 @@ Pipeline Stages:
 2. Install Dependencies: Installs project dependencies using npm ci.
 3. Install Playwright Browsers & Dependencies: Installs Playwright browsers and copies the .env.example file to .env if it doesn't exist.
 4. Run Playwright Tests: Executes the selected Playwright test suite with the specified browser and mode (headless or headed).
-5. Post Actions: Archives test reports, publishes JUnit and Allure reports, and cleans up allure-results on success.
+5. Post Actions: Generates and publishes Playwright HTML, custom HTML, JUnit, and Allure reports.
 6. Email Notification: Sends an email notification with the build status and links to the reports.
 7. Parameters: Allows users to select the test suite, browser, and mode for the test execution.
 
@@ -66,7 +66,20 @@ pipeline {
   }
   post {
     always {
-      archiveArtifacts artifacts: 'playwright-report/**,test-results/**', allowEmptyArchive: true
+      script {
+        if (fileExists('test-results/playwright-results.json')) {
+          powershell 'node scripts/generate-custom-report.js'
+        } else {
+          echo 'Playwright JSON results were not generated; skipping the custom HTML report.'
+        }
+
+        if (fileExists('allure-results')) {
+          allure includeProperties: false, results: [[path: 'allure-results']]
+        } else {
+          echo 'Allure results were not generated; skipping the Allure report.'
+        }
+      }
+      archiveArtifacts artifacts: 'playwright-report/**,test-results/**,allure-results/**,custom-report/**', allowEmptyArchive: true
       junit testResults: 'test-results/results.xml', allowEmptyResults: true
       publishHTML([
         allowMissing: true,
@@ -75,6 +88,14 @@ pipeline {
         reportDir: 'playwright-report',
         reportFiles: 'index.html',
         reportName: 'Playwright HTML Report'
+      ])
+      publishHTML([
+        allowMissing: true,
+        alwaysLinkToLastBuild: true,
+        keepAll: true,
+        reportDir: 'custom-report',
+        reportFiles: 'index.html',
+        reportName: 'Custom Test Report'
       ])
       emailext(
         subject: "Jenkins Build: ${env.JOB_NAME} #${env.BUILD_NUMBER} - ${currentBuild.currentResult}",
