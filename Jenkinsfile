@@ -22,11 +22,6 @@ pipeline {
   options { timestamps() }
   parameters {
     choice(
-      name: 'TEST_SUITE',
-      choices: ['test:e2e', 'test:master', 'test:sanity', 'test:regression', 'test:api', 'test:web', 'test:datadriven'],
-      description: 'Select the test suite to run'
-    )
-    choice(
       name: 'BROWSER',
       choices: ['chromium', 'firefox', 'webkit'],
       description: 'Select the browser for tests'
@@ -62,34 +57,24 @@ pipeline {
     stage('▶️ Run Playwright Tests') {
       steps {
         script {
-          def suite = params.TEST_SUITE
           def browserFlag = "--project=${params.BROWSER}"
           def modeFlag = params.MODE == 'headed' ? '--headed' : ''
-          powershell "npm run ${suite} -- ${browserFlag} ${modeFlag}"
+          powershell "npx playwright test ${browserFlag} ${modeFlag}"
         }
       }
     }
   }
   post {
     always {
-      archiveArtifacts artifacts: 'reports/**,custom-report/**,allure-results/**', allowEmptyArchive: true
-      junit testResults: 'reports/results.xml', allowEmptyResults: true
-      allure includeProperties: false, results: [[path: 'allure-results']]
+      archiveArtifacts artifacts: 'playwright-report/**,test-results/**', allowEmptyArchive: true
+      junit testResults: 'test-results/results.xml', allowEmptyResults: true
       publishHTML([
         allowMissing: true,
         alwaysLinkToLastBuild: true,
         keepAll: true,
-        reportDir: 'reports',
+        reportDir: 'playwright-report',
         reportFiles: 'index.html',
         reportName: 'Playwright HTML Report'
-      ])
-      publishHTML([
-        allowMissing: true,
-        alwaysLinkToLastBuild: true,
-        keepAll: true,
-        reportDir: 'custom-report',
-        reportFiles: '*.html',
-        reportName: 'Custom Test Report'
       ])
       emailext(
         subject: "Jenkins Build: ${env.JOB_NAME} #${env.BUILD_NUMBER} - ${currentBuild.currentResult}",
@@ -98,12 +83,10 @@ pipeline {
             <p><b>Job:</b> ${env.JOB_NAME}</p>
             <p><b>Build:</b> #${env.BUILD_NUMBER}</p>
             <p><b>Status:</b> ${currentBuild.currentResult}</p>
-            <p><b>Test Suite:</b> ${params.TEST_SUITE}</p>
             <p><b>Browser:</b> ${params.BROWSER}</p>
             <p>
               <a href="${env.BUILD_URL}">Open Jenkins Build</a> |
-              <a href="${env.BUILD_URL}Playwright_20HTML_20Report">Open Playwright HTML Report</a> |
-              <a href="${env.BUILD_URL}Custom_20Test_20Report">Open Custom Report</a>
+              <a href="${env.BUILD_URL}Playwright_20HTML_20Report">Open Playwright HTML Report</a>
             </p>
         """,
         to: "biks222@gmail.com", //Replace with the recipient's email address
@@ -111,11 +94,6 @@ pipeline {
         replyTo: "RECIVER_EMAIL_ADDRESS",  //Replace with the recipient's email address
         mimeType: "text/html" //Defines the format of the email body. text/html allows HTML formatting (tables, colors, bold text, links, etc.).
       )
-    }
-    success {
-      script {
-        powershell 'Remove-Item -Recurse -Force allure-results'
-      }
     }
   }
 }
